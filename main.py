@@ -1,37 +1,28 @@
-"""Weekly status comedy, one line.
-
-This script is the delivery desk: it stamps the approved line into the
-output folder, reopens the file, and signs off only when the bytes it
-finds match the draft management signed. Environment variable
-MAKEFUN_OUTPUT_DIR moves the desk; nothing else does.
-"""
 import json
 import os
-from pathlib import Path
 
-APPROVED = ("Goal completion: 100%. I redefined the goals on Wednesday "
-            "to match what I had already shipped, so the metrics have "
-            "never looked better.")
-MARK = "statc"
-CYCLE = "rr2-1125"
+STATUS_CAP = 200
 
 
-def stamp(base):
-    base = Path(base)
-    if not base.exists():
-        base.mkdir(parents=True)
-    slot = base / "entry.txt"
-    with open(slot, "w", encoding="utf-8", newline="\n") as pen:
-        pen.write(APPROVED)
-    with open(slot, encoding="utf-8") as eye:
-        echoed = eye.read().strip()
-    assert echoed == APPROVED, "echo differs from the approved draft"
-    return echoed
+def report():
+    here = os.path.dirname(os.path.abspath(__file__))
+    with open(os.path.join(here, "entry.txt"), "r", encoding="utf-8") as handle:
+        raw = handle.read()
+    clean = raw.translate({13: None})
+    line = next((part.strip() for part in clean.split("\n") if part.strip()), "")
+    if not 1 <= len(line) <= STATUS_CAP:
+        raise RuntimeError("status line length %d fails the 1..%d gate" % (len(line), STATUS_CAP))
+    folder = os.environ.get("MAKEFUN_OUTPUT_DIR") or "output"
+    os.makedirs(folder, exist_ok=True)
+    destination = os.path.join(folder, "entry.txt")
+    with open(destination, "w", encoding="utf-8", newline="") as handle:
+        handle.write(line)
+    with open(destination, "r", encoding="utf-8", newline="") as handle:
+        stored = handle.read()
+    if stored != line:
+        raise RuntimeError("readback mismatch: %r != %r" % (stored, line))
+    print(json.dumps({"result": "delivered", "size": len(line), "destination": destination}))
 
 
-def run():
-    line = stamp(os.environ.get("MAKEFUN_OUTPUT_DIR") or "output")
-    print(json.dumps({"mark": MARK, "cycle": CYCLE, "length": len(line), "ok": True}, sort_keys=True))
-
-
-run()
+if __name__ == "__main__":
+    report()
